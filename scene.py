@@ -1,5 +1,6 @@
 from aifeynman import run_aifeynman
 from manim import *
+from matplotlib import image
 import numpy as np
 from skytubesim import *
 import math
@@ -9,6 +10,15 @@ sim = SkyTubeSim()
 config.window_size = (300, 130)
 config.background_color = "#87CEEB"
 
+def make_arrow(base_element: Mobject, magnitude: float, max_value: float, label: str, offset=[0,0,0]):
+    arrow_length = np.interp(abs(magnitude), [0, max_value], [.3, 2]) * (-1 if magnitude < 0 else 1)
+    start_point = base_element.get_center() + offset
+    end_point = base_element.get_center() + offset + [0, arrow_length, 0]
+    vel_arrow = Arrow(start_point, end_point, max_stroke_width_to_length_ratio=1, buff=0)
+    txt_offset = DOWN if magnitude < 0 else UP
+    vel_txt = Text(label).next_to(vel_arrow.get_tip(), txt_offset, buff=0)
+    return Group(vel_arrow, vel_txt)
+
 class AnimateExample(Scene):
     def construct(self):
         circle = Circle(radius=.1).set_fill(RED, opacity=1.0 )
@@ -17,11 +27,9 @@ class AnimateExample(Scene):
 
         sim.run()
 
-        image = ImageMobject("./assets/img/fallman")
-        image.scale(0.5)
-        arrow_up = Arrow(ORIGIN, [0, 2, 0], max_stroke_width_to_length_ratio=1, buff=0)
-
-        free_body_group = Group(image, arrow_up).move_to(LEFT * 3)
+        fallman = ImageMobject("./assets/img/fallman")
+        fallman.scale(0.5)
+        free_body_group = Group(fallman).move_to(LEFT * 3)
 
         self.add(free_body_group)
 
@@ -35,22 +43,17 @@ class AnimateExample(Scene):
         for i in range(sim.currentIndex):
             yPos = convert_world_height_to_screen_height(sim.height[i])
 
-            acc_arrow_scale = (sim.acceleration[i]/sim.acceleration[i - 1])
-            gs = sim.acceleration[i]/9.81
-
-            acc_txt = Text('a = ' + str(round(gs, 2)) + " Gs")
-            acc_txt.next_to(arrow_up.get_tip(), UP)
-            free_body_group.add(acc_txt)
-
-            if not math.isnan(acc_arrow_scale) and not math.isinf(acc_arrow_scale):
-                arrow_up.scale(acc_arrow_scale, scale_tips=True)
-                yDel = abs(1 - acc_arrow_scale) * arrow_up.height * -0.5
-                arrow_up.shift([0, yDel, 0])
+            vel_arrow_group = make_arrow(fallman, sim.velocity[i], np.max(np.abs(sim.velocity)), "V", offset=[0, -.7, 0])
+            pd_arrow_group = make_arrow(fallman, sim.pressureDrag[i], max(sim.pressureDrag), "P", offset=[.7, 0, 0])
+            by_arrow_group = make_arrow(fallman, sim.buoyancyForce[i], max(sim.buoyancyForce), "B", offset=[-.7, 0, 0])
+            acc_arrow_group = make_arrow(fallman, sim.acceleration[i], max(sim.acceleration), "A")
+            free_body_group.add(vel_arrow_group, acc_arrow_group, pd_arrow_group, by_arrow_group)
 
             self.play(
                 circle.animate.move_to(RIGHT + [0, yPos, 0]), run_time=0.025
             )
-            free_body_group.remove(acc_txt)
+
+            free_body_group.remove(acc_arrow_group, vel_arrow_group, pd_arrow_group, by_arrow_group)
 
 
 
